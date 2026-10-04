@@ -214,7 +214,7 @@ with col3:
     st.markdown('</div>', unsafe_allow_html=True)
     # --- ROW 2: LIVE SAT-MAP & INTEL FEED ---
     st.markdown("<br>", unsafe_allow_html=True)
-    map_col, intel_col = st.columns([2, 1])
+    map_col, intel_col = st.columns([1.3, 1])
 
     with map_col:
         st.markdown('<div class="hud-panel" style="padding: 0; border: none;">', unsafe_allow_html=True)
@@ -225,7 +225,7 @@ with col3:
 
     with intel_col:
         st.markdown('<div class="hud-panel" style="padding: 0; border: none;">', unsafe_allow_html=True)
-        st.markdown("<h3 style='margin-bottom: 5px;'>📡 NLP SIGNAL INTERCEPT</h3>", unsafe_allow_html=True)
+        st.markdown("<h3 style='margin-bottom: 5px;'>📡 SIGNAL INTERCEPT</h3>", unsafe_allow_html=True)
         # Renders the dynamic news summary text
         st.markdown(get_news_summary(risk_score, traffic_val), unsafe_allow_html=True)
         st.markdown('</div>', unsafe_allow_html=True)
