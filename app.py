@@ -213,19 +213,19 @@ with col3:
     st.markdown("<br><div class='telemetry'>CONFIDENCE MATCH: 93.8%<br>DATASET: 36_MO_SPATIOTEMPORAL_LOG</div>", unsafe_allow_html=True)
     st.markdown('</div>', unsafe_allow_html=True)
     # --- ROW 2: LIVE SAT-MAP & INTEL FEED ---
-st.markdown("<br>", unsafe_allow_html=True)
-map_col, intel_col = st.columns([2, 1])
+    st.markdown("<br>", unsafe_allow_html=True)
+    map_col, intel_col = st.columns([2, 1])
 
-with map_col:
-st.markdown('<div class="hud-panel" style="padding: 0; border: none;">', unsafe_allow_html=True)
-st.markdown("<h3 style='margin-bottom: 5px;'>🛰️ ORBITAL SURVEILLANCE [HOWRAH_SEC]</h3>", unsafe_allow_html=True)
-# Renders the HTML map from intel_feed.py
-components.html(get_map_html(lat="22.5958", lon="88.2636"), height=290)
-st.markdown('</div>', unsafe_allow_html=True)
+    with map_col:
+        st.markdown('<div class="hud-panel" style="padding: 0; border: none;">', unsafe_allow_html=True)
+        st.markdown("<h3 style='margin-bottom: 5px;'>🛰️ ORBITAL SURVEILLANCE [HOWRAH_SEC]</h3>", unsafe_allow_html=True)
+        # Renders the HTML map from intel_feed.py
+        components.html(get_map_html(lat="22.5958", lon="88.2636"), height=290)
+        st.markdown('</div>', unsafe_allow_html=True)
 
-with intel_col:
-st.markdown('<div class="hud-panel" style="padding: 0; border: none;">', unsafe_allow_html=True)
-st.markdown("<h3 style='margin-bottom: 5px;'>📡 NLP SIGNAL INTERCEPT</h3>", unsafe_allow_html=True)
-# Renders the dynamic news summary text
-st.markdown(get_news_summary(risk_score, traffic_val), unsafe_allow_html=True)
-st.markdown('</div>', unsafe_allow_html=True)
+    with intel_col:
+        st.markdown('<div class="hud-panel" style="padding: 0; border: none;">', unsafe_allow_html=True)
+        st.markdown("<h3 style='margin-bottom: 5px;'>📡 NLP SIGNAL INTERCEPT</h3>", unsafe_allow_html=True)
+        # Renders the dynamic news summary text
+        st.markdown(get_news_summary(risk_score, traffic_val), unsafe_allow_html=True)
+        st.markdown('</div>', unsafe_allow_html=True)
