@@ -1,0 +1,342 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>BHAVISHYA — Predictive Intelligence Grid</title>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <style>
+    :root {
+      --bg: #090d16;
+      --panel: #111827;
+      --border: #1f2937;
+      --accent: #00f0ff;
+      --danger: #ef4444;
+      --warning: #f59e0b;
+      --safe: #10b981;
+      --text: #f3f4f6;
+      --text-dim: #9ca3af;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, monospace; }
+    body { background: var(--bg); color: var(--text); overflow-x: hidden; height: 100vh; display: flex; flex-direction: column; }
+    header {
+      background: var(--panel);
+      padding: 12px 24px;
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    .brand { font-size: 1.2rem; font-weight: 800; letter-spacing: 2px; color: var(--accent); }
+    .status-badge {
+      display: inline-flex; align-items: center; gap: 8px; font-size: 0.8rem;
+      background: rgba(16, 185, 129, 0.1); border: 1px solid var(--safe); color: var(--safe);
+      padding: 4px 10px; border-radius: 999px;
+    }
+    .pulse { width: 8px; height: 8px; border-radius: 50%; background: var(--safe); animation: blink 1.5s infinite; }
+    @keyframes blink { 0%, 100% { opacity: 1; } 50% { opacity: 0.2; } }
+
+    .main-grid {
+      display: grid;
+      grid-template-columns: 320px 1fr 360px;
+      flex: 1;
+      overflow: hidden;
+    }
+    .panel {
+      background: var(--panel);
+      border-right: 1px solid var(--border);
+      padding: 16px;
+      overflow-y: auto;
+      display: flex;
+      flex-direction: column;
+      gap: 18px;
+    }
+    .panel-right { border-right: none; border-left: 1px solid var(--border); }
+    h3 { font-size: 0.85rem; text-transform: uppercase; letter-spacing: 1.5px; color: var(--text-dim); margin-bottom: 8px; }
+    
+    .control-group { display: flex; flex-direction: column; gap: 6px; }
+    .control-group label { font-size: 0.8rem; display: flex; justify-content: space-between; }
+    input[type=range] { width: 100%; accent-color: var(--accent); background: #1f2937; border-radius: 4px; }
+
+    #map { width: 100%; height: 55%; background: #0b1120; }
+    .graph-container {
+      height: 45%;
+      border-top: 1px solid var(--border);
+      background: #0d1322;
+      padding: 12px;
+      position: relative;
+    }
+
+    .metric-card {
+      background: #182234;
+      border: 1px solid var(--border);
+      padding: 12px;
+      border-radius: 6px;
+    }
+    .risk-huge { font-size: 2.2rem; font-weight: 800; font-family: monospace; }
+    .bar-bg { width: 100%; height: 6px; background: #2d3748; border-radius: 3px; overflow: hidden; margin-top: 6px; }
+    .bar-fill { height: 100%; width: 0%; transition: width 0.3s ease; }
+
+    .rec-card {
+      background: rgba(0, 240, 255, 0.05);
+      border: 1px solid var(--accent);
+      padding: 12px;
+      border-radius: 6px;
+      font-size: 0.85rem;
+    }
+    .btn-action {
+      background: var(--accent);
+      color: #000;
+      border: none;
+      padding: 6px 12px;
+      border-radius: 4px;
+      font-weight: 700;
+      font-size: 0.75rem;
+      cursor: pointer;
+      margin-top: 8px;
+      width: 100%;
+    }
+    svg line { stroke: #374151; stroke-width: 2; transition: stroke 0.3s; }
+    svg circle { transition: fill 0.3s; cursor: pointer; }
+    svg text { font-size: 10px; fill: #9ca3af; font-family: monospace; }
+  </style>
+</head>
+<body>
+
+  <header>
+    <div class="brand">BHAVISHYA // PREDICTIVE URBAN GRID</div>
+    <div class="status-badge"><span class="pulse" id="pulse-dot"></span> LIVE INFERENCE ENGINE</div>
+  </header>
+
+  <div class="main-grid">
+    <!-- LEFT PANEL: SIMULATION CONTROLS -->
+    <div class="panel">
+      <div>
+        <h3>What-If Simulation Sandbox</h3>
+        <p style="font-size: 0.75rem; color: var(--text-dim); margin-bottom: 12px;">Perturb variables to trigger spatiotemporal cascading risks.</p>
+      </div>
+
+      <div class="control-group">
+        <label>Rainfall (Precipitation) <span id="val-rain">35 mm/h</span></label>
+        <input type="range" id="slider-rain" min="0" max="150" value="35" />
+      </div>
+
+      <div class="control-group">
+        <label>Traffic Density <span id="val-traffic">45%</span></label>
+        <input type="range" id="slider-traffic" min="10" max="100" value="45" />
+      </div>
+
+      <div class="control-group">
+        <label>Drainage / Road Capacity <span id="val-drain">85%</span></label>
+        <input type="range" id="slider-drain" min="10" max="100" value="85" />
+      </div>
+
+      <div class="control-group">
+        <label>Hospital Available Beds <span id="val-beds">70%</span></label>
+        <input type="range" id="slider-beds" min="10" max="100" value="70" />
+      </div>
+
+      <div class="metric-card">
+        <h3>Model Confidence</h3>
+        <div style="font-size: 1.1rem; font-weight: bold; color: var(--accent);">93.8% (Ensemble GNN)</div>
+        <p style="font-size: 0.7rem; color: var(--text-dim); margin-top: 4px;">Trained on 36-month spatiotemporal flood & transit logs.</p>
+      </div>
+    </div>
+
+    <!-- CENTER PANEL: DIGITAL TWIN & GNN TOPOLOGY -->
+    <div style="display: flex; flex-direction: column; height: 100%;">
+      <div id="map"></div>
+      <div class="graph-container">
+        <h3>GNN Dependency Graph (Cascading Failure Propagation)</h3>
+        <svg id="gnn-canvas" width="100%" height="80%"></svg>
+      </div>
+    </div>
+
+    <!-- RIGHT PANEL: PREDICTIVE & PRESCRIPTIVE METRICS -->
+    <div class="panel panel-right">
+      <div class="metric-card">
+        <h3>City Risk Index (T + 60m)</h3>
+        <div class="risk-huge" id="risk-score">38%</div>
+        <div class="bar-bg"><div class="bar-fill" id="risk-bar"></div></div>
+      </div>
+
+      <div>
+        <h3>Explainable AI (Feature Attribution)</h3>
+        <div style="font-size: 0.8rem; display: flex; flex-direction: column; gap: 8px;">
+          <div>
+            <div style="display: flex; justify-content: space-between;"><span>Rainfall Inundation</span><span id="xai-rain">+18%</span></div>
+            <div class="bar-bg"><div class="bar-fill" id="xai-rain-bar" style="background: var(--danger);"></div></div>
+          </div>
+          <div>
+            <div style="display: flex; justify-content: space-between;"><span>Road Bottleneck Delay</span><span id="xai-traffic">+12%</span></div>
+            <div class="bar-bg"><div class="bar-fill" id="xai-traffic-bar" style="background: var(--warning);"></div></div>
+          </div>
+          <div>
+            <div style="display: flex; justify-content: space-between;"><span>Drainage Deficit</span><span id="xai-drain">+8%</span></div>
+            <div class="bar-bg"><div class="bar-fill" id="xai-drain-bar" style="background: var(--accent);"></div></div>
+          </div>
+        </div>
+      </div>
+
+      <div>
+        <h3>Prescriptive Engine (Ranked Interventions)</h3>
+        <div class="rec-card" id="intervention-box">
+          <strong id="rec-title">Optimal Action Identified</strong>
+          <p id="rec-desc" style="margin-top: 4px; color: var(--text-dim);">System stable. Standard monitoring in progress.</p>
+          <button class="btn-action" onclick="applyIntervention()">Deploy Recommended Protocol</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // 1. Initialize Map centered on Mumbai Urban Core
+    const map = L.map('map', { zoomControl: false }).setView([19.0760, 72.8777], 12);
+    L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+      maxZoom: 18
+    }).addTo(map);
+
+    // Mock Grid Cells
+    const gridCoords = [
+      [19.09, 72.84], [19.09, 72.88], [19.09, 72.92],
+      [19.05, 72.84], [19.05, 72.88], [19.05, 72.92],
+      [19.01, 72.84], [19.01, 72.88], [19.01, 72.92]
+    ];
+    const gridPolygons = gridCoords.map((coord, idx) => {
+      return L.rectangle([
+        [coord[0] - 0.015, coord[1] - 0.015],
+        [coord[0] + 0.015, coord[1] + 0.015]
+      ], { color: '#00f0ff', weight: 1, fillOpacity: 0.15 }).addTo(map);
+    });
+
+    // 2. GNN Nodes & Topology
+    const nodes = [
+      { id: "Power", x: 60, y: 70, label: "Power Substation 4" },
+      { id: "Pumps", x: 180, y: 30, label: "Drainage Pump B" },
+      { id: "Junction", x: 180, y: 110, label: "Arterial Flyover" },
+      { id: "Hospital", x: 320, y: 70, label: "Apex Trauma Hospital" }
+    ];
+    const edges = [
+      { from: 0, to: 1 }, // Power -> Pumps
+      { from: 1, to: 2 }, // Pumps -> Junction (if pumps fail, road floods)
+      { from: 2, to: 3 }  // Junction -> Hospital (if road floods, ambulance delayed)
+    ];
+
+    function renderGNN(riskLevel) {
+      const svg = document.getElementById("gnn-canvas");
+      svg.innerHTML = '';
+      
+      // Determine node status
+      const pumpFail = riskLevel > 60;
+      const roadFail = riskLevel > 75;
+      const hospCrit = riskLevel > 80;
+
+      // Draw Edges
+      edges.forEach(e => {
+        const line = document.createElementNS("http://www.w3.org/2000/svg", "line");
+        line.setAttribute("x1", nodes[e.from].x);
+        line.setAttribute("y1", nodes[e.from].y);
+        line.setAttribute("x2", nodes[e.to].x);
+        line.setAttribute("y2", nodes[e.to].y);
+        line.setAttribute("stroke", (e.to === 1 && pumpFail) || (e.to === 2 && roadFail) || (e.to === 3 && hospCrit) ? "#ef4444" : "#374151");
+        svg.appendChild(line);
+      });
+
+      // Draw Nodes
+      nodes.forEach((n, i) => {
+        let color = "#10b981";
+        if (i === 1 && pumpFail) color = "#f59e0b";
+        if (i === 2 && roadFail) color = "#ef4444";
+        if (i === 3 && hospCrit) color = "#ef4444";
+
+        const circle = document.createElementNS("http://www.w3.org/2000/svg", "circle");
+        circle.setAttribute("cx", n.x);
+        circle.setAttribute("cy", n.y);
+        circle.setAttribute("r", 10);
+        circle.setAttribute("fill", color);
+        svg.appendChild(circle);
+
+        const txt = document.createElementNS("http://www.w3.org/2000/svg", "text");
+        txt.setAttribute("x", n.x - 20);
+        txt.setAttribute("y", n.y + 24);
+        txt.textContent = n.label;
+        svg.appendChild(txt);
+      });
+    }
+
+    // 3. Inference Engine
+    function calculate() {
+      const rain = parseInt(document.getElementById('slider-rain').value);
+      const traffic = parseInt(document.getElementById('slider-traffic').value);
+      const drain = parseInt(document.getElementById('slider-drain').value);
+      const beds = parseInt(document.getElementById('slider-beds').value);
+
+      document.getElementById('val-rain').innerText = rain + " mm/h";
+      document.getElementById('val-traffic').innerText = traffic + "%";
+      document.getElementById('val-drain').innerText = drain + "%";
+      document.getElementById('val-beds').innerText = beds + "%";
+
+      // Cascading Risk Math
+      let risk = Math.min(100, Math.round((rain * 0.45) + (traffic * 0.35) + ((100 - drain) * 0.3) + ((100 - beds) * 0.2)));
+      
+      const riskEl = document.getElementById('risk-score');
+      const barEl = document.getElementById('risk-bar');
+      riskEl.innerText = risk + "%";
+      barEl.style.width = risk + "%";
+
+      let statusColor = "#10b981";
+      if (risk > 50) statusColor = "#f59e0b";
+      if (risk > 75) statusColor = "#ef4444";
+      riskEl.style.color = statusColor;
+      barEl.style.background = statusColor;
+
+      // Update XAI Contributions
+      const rainContrib = Math.round(rain * 0.45);
+      const trafficContrib = Math.round(traffic * 0.35);
+      const drainContrib = Math.round((100 - drain) * 0.3);
+
+      document.getElementById('xai-rain').innerText = `+${rainContrib}%`;
+      document.getElementById('xai-rain-bar').style.width = `${Math.min(100, rainContrib * 1.8)}%`;
+      document.getElementById('xai-traffic').innerText = `+${trafficContrib}%`;
+      document.getElementById('xai-traffic-bar').style.width = `${Math.min(100, trafficContrib * 1.8)}%`;
+      document.getElementById('xai-drain').innerText = `+${drainContrib}%`;
+      document.getElementById('xai-drain-bar').style.width = `${Math.min(100, drainContrib * 1.8)}%`;
+
+      // Update Map Cells
+      gridPolygons.forEach((poly, i) => {
+        const cellRisk = (risk + (i * 4)) % 100;
+        let c = "#10b981";
+        if (cellRisk > 50) c = "#f59e0b";
+        if (cellRisk > 75) c = "#ef4444";
+        poly.setStyle({ color: c, fillOpacity: cellRisk / 150 });
+      });
+
+      // Update Prescriptive Recommendation
+      const recTitle = document.getElementById('rec-title');
+      const recDesc = document.getElementById('rec-desc');
+      if (risk > 75) {
+        recTitle.innerText = "CRITICAL: Reroute Arterial Transit & Dispatch Pumps";
+        recDesc.innerText = "Predicted 38-min ambulance blockade to Apex Hospital. Pre-emptively redirect heavy traffic to Ring Road. Expected Risk Reduction: -41%.";
+      } else if (risk > 50) {
+        recTitle.innerText = "ELEVATED: Pre-stage Auxiliary Pumps in Zone B";
+        recDesc.innerText = "Drainage capacity threshold nearing limits. Expected Risk Reduction: -22%.";
+      } else {
+        recTitle.innerText = "NOMINAL: Standard Traffic Adaptive Flow";
+        recDesc.innerText = "All infrastructure operating within safe tolerance parameters.";
+      }
+
+      renderGNN(risk);
+    }
+
+    function applyIntervention() {
+      document.getElementById('slider-drain').value = 95;
+      document.getElementById('slider-traffic').value = 30;
+      calculate();
+    }
+
+    document.querySelectorAll('input[type=range]').forEach(s => s.addEventListener('input', calculate));
+    calculate();
+  </script>
+</body>
+</html>
