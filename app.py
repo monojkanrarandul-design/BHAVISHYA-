@@ -2,163 +2,211 @@ import streamlit as st
 import graphviz
 import time
 import requests
+from datetime import datetime
 
 # --- PAGE CONFIGURATION ---
-st.set_page_config(page_title="BHAVISHYA | Predictive Grid", layout="wide", initial_sidebar_state="expanded")
+st.set_page_config(page_title="BHAVISHYA | HUD", layout="wide", initial_sidebar_state="expanded")
 
-# Custom CSS for a hacker/dashboard vibe
+# --- CYBERPUNK / HELICOPTER HUD CSS ---
 st.markdown("""
     <style>
-    .big-font { font-size: 2.5rem !important; font-weight: 800; font-family: monospace; }
-    .status-badge { background-color: #0f3433; color: #00f0ff; padding: 5px 15px; border-radius: 20px; font-weight: bold; }
+    @import url('https://fonts.googleapis.com/css2?family=Share+Tech+Mono&display=swap');
+    
+    /* Global Font and Background */
+    html, body, [class*="css"] {
+        font-family: 'Share Tech Mono', monospace !important;
+        background-color: #030a04 !important;
+        color: #00ff41 !important;
+    }
+    
+    /* Target main background */
+    .stApp {
+        background-color: #030a04;
+        background-image: linear-gradient(rgba(0, 255, 65, 0.03) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(0, 255, 65, 0.03) 1px, transparent 1px);
+        background-size: 20px 20px;
+    }
+
+    /* HUD Panels */
+    .hud-panel {
+        border: 1px solid #00ff41;
+        background: rgba(0, 20, 0, 0.6);
+        padding: 15px;
+        box-shadow: inset 0 0 15px rgba(0,255,65,0.2);
+        margin-bottom: 15px;
+    }
+    
+    /* Blinking Warning Text */
+    .warning-flash {
+        color: #ff003c;
+        font-weight: bold;
+        text-shadow: 0 0 5px #ff003c;
+        animation: blink 1s step-end infinite;
+    }
+    @keyframes blink { 50% { opacity: 0; } }
+
+    /* Custom typography */
+    h1, h2, h3 { color: #00f0ff !important; text-transform: uppercase; letter-spacing: 2px; }
+    .telemetry { font-size: 0.8rem; color: #a3a3a3; }
+    
+    /* Override Streamlit Sidebar */
+    [data-testid="stSidebar"] {
+        background-color: #020603 !important;
+        border-right: 1px solid #00ff41;
+    }
+    
+    /* Hide Streamlit branding */
+    #MainMenu {visibility: hidden;}
+    footer {visibility: hidden;}
     </style>
 """, unsafe_allow_html=True)
 
 # --- API FUNCTIONS ---
 def get_live_weather(city="Howrah"):
     try:
-        # Check if secrets exist to avoid crashing
-        if "OPENWEATHER_KEY" not in st.secrets:
-            return 0
-            
+        if "OPENWEATHER_KEY" not in st.secrets: return 0
         api_key = st.secrets["OPENWEATHER_KEY"]
         url = f"https://api.openweathermap.org/data/2.5/weather?q={city}&appid={api_key}&units=metric"
         response = requests.get(url).json()
-        
-        # OpenWeather returns a 'rain' dict if it's raining (e.g., {'1h': 2.5} mm/hr)
-        if 'rain' in response:
-            return response['rain'].get('1h', 0) * 10  # Scaled for demo visibility
-        return 0 # No rain
-    except Exception as e:
-        return 0
+        if 'rain' in response: return response['rain'].get('1h', 0) * 10 
+        return 0 
+    except: return 0
 
-def get_live_traffic(lat="22.5958", lon="88.2636"): # Howrah Coordinates
+def get_live_traffic(lat="22.5958", lon="88.2636"):
     try:
-        if "TOMTOM_KEY" not in st.secrets:
-            return 45
-            
+        if "TOMTOM_KEY" not in st.secrets: return 45
         api_key = st.secrets["TOMTOM_KEY"]
         url = f"https://api.tomtom.com/traffic/services/4/flowSegmentData/absolute/10/json?key={api_key}&point={lat},{lon}"
         response = requests.get(url).json()
-        
         flow_data = response['flowSegmentData']
-        current_speed = flow_data['currentSpeed']
-        free_flow_speed = flow_data['freeFlowSpeed']
-        
-        # Calculate traffic density % (slower speed relative to free flow = higher density)
-        if free_flow_speed > 0:
-            congestion = 100 - ((current_speed / free_flow_speed) * 100)
-            return int(max(10, congestion)) # Minimum 10% base traffic
+        free_flow = flow_data['freeFlowSpeed']
+        if free_flow > 0: return int(max(10, 100 - ((flow_data['currentSpeed'] / free_flow) * 100)))
         return 45
-    except Exception as e:
-        return 45
+    except: return 45
 
-# --- HEADER ---
-st.title("BHAVISHYA // PREDICTIVE URBAN GRID")
-st.markdown("<span class='status-badge'>🟢 LIVE INFERENCE ENGINE</span>", unsafe_allow_html=True)
-st.markdown("---")
+# --- TOP HUD TELEMETRY BAR ---
+current_time = datetime.now().strftime("%H:%M:%S:%f")[:-3]
+st.markdown(f"""
+    <div style='display: flex; justify-content: space-between; border-bottom: 2px solid #00f0ff; padding-bottom: 5px; margin-bottom: 20px;'>
+        <div><span style='color:#00f0ff'>SYS:</span> BHAVISHYA_V1.0.4</div>
+        <div><span style='color:#00f0ff'>TGT:</span> HOWRAH_URBAN_GRID [22.5958° N, 88.2636° E]</div>
+        <div class='telemetry'><span style='color:#00f0ff'>UPTIME:</span> {current_time}</div>
+    </div>
+""", unsafe_allow_html=True)
 
-# --- SIDEBAR: MODE SELECTION & CONTROLS ---
-st.sidebar.header("📡 Data Source")
-use_live_data = st.sidebar.toggle("🟢 Fetch Live City APIs (Howrah/Kolkata)", value=False)
+# --- SIDEBAR (FLIGHT CONTROLS) ---
+st.sidebar.markdown("### 🎛️ FLIGHT CONTROLS")
+use_live_data = st.sidebar.toggle("🟢 SAT-LINK (Live APIs)", value=False)
 
 if use_live_data:
-    st.sidebar.success("Connected to OpenWeather & TomTom Sensors.")
-    with st.spinner("Fetching live telemetry..."):
-        # Fetch live data
-        live_rain = get_live_weather("Howrah")
-        live_traffic = get_live_traffic("22.5958", "88.2636")
-        
-        # Lock sliders by displaying them as disabled
-        rain = st.sidebar.slider("Rainfall (mm/h) [LIVE]", 0, 150, int(live_rain), disabled=True)
-        traffic = st.sidebar.slider("Traffic Density (%) [LIVE]", 10, 100, int(live_traffic), disabled=True)
+    st.sidebar.markdown("<span style='color:#00ff41'>[LINK ESTABLISHED]</span>", unsafe_allow_html=True)
+    live_rain = get_live_weather("Howrah")
+    live_traffic = get_live_traffic("22.5958", "88.2636")
+    rain = st.sidebar.slider("PRECIPITATION [mm/h]", 0, 150, int(live_rain), disabled=True)
+    traffic = st.sidebar.slider("TRAFFIC DENSITY [%]", 10, 100, int(live_traffic), disabled=True)
 else:
-    st.sidebar.info("Sandbox Mode Active.")
-    # Manual Sliders
-    rain = st.sidebar.slider("Rainfall (mm/h)", 0, 150, 35)
-    traffic = st.sidebar.slider("Traffic Density (%)", 10, 100, 45)
+    st.sidebar.markdown("<span style='color:#ff003c'>[MANUAL OVERRIDE]</span>", unsafe_allow_html=True)
+    rain = st.sidebar.slider("PRECIPITATION [mm/h]", 0, 150, 35)
+    traffic = st.sidebar.slider("TRAFFIC DENSITY [%]", 10, 100, 45)
 
 st.sidebar.markdown("---")
-st.sidebar.subheader("Infrastructure Status")
-drain = st.sidebar.slider("Drainage Capacity (%)", 10, 100, 85)
-beds = st.sidebar.slider("Hospital Beds Available (%)", 10, 100, 70)
+drain = st.sidebar.slider("DRAINAGE CAPACITY [%]", 10, 100, 85)
+beds = st.sidebar.slider("TRAUMA CENTER LOAD [%]", 10, 100, 70)
 
-# Simulate applying intervention
-if st.sidebar.button("🚨 Deploy AI Recommended Protocol"):
-    with st.spinner("Rerouting traffic & pre-staging pumps..."):
-        time.sleep(1.5)
-        st.session_state['traffic'] = 30
-        st.session_state['drain'] = 95
-        st.sidebar.success("Intervention Deployed Successfully!")
+if st.sidebar.button("⚠️ EXECUTE COUNTERMEASURES"):
+    with st.spinner("INITIATING OVERRIDE..."):
+        time.sleep(1)
+        st.session_state['traffic'] = 20
+        st.session_state['drain'] = 100
+        st.sidebar.success("COUNTERMEASURES ACTIVE")
 
-# Use session state if intervention was applied
 traffic_val = st.session_state.get('traffic', traffic)
 drain_val = st.session_state.get('drain', drain)
 
-# --- INFERENCE MATH (Cascading Risk) ---
-# Simulating the PyTorch GNN output
+# --- MATH ---
 risk_score = min(100, int((rain * 0.45) + (traffic_val * 0.35) + ((100 - drain_val) * 0.3) + ((100 - beds) * 0.2)))
+alert_class = "warning-flash" if risk_score > 75 else ""
+color_hex = "#ff003c" if risk_score > 75 else ("#f0a500" if risk_score > 50 else "#00ff41")
 
-# Determine Status Colors
-if risk_score > 75:
-    status_color, risk_text = "red", "CRITICAL"
-elif risk_score > 50:
-    status_color, risk_text = "orange", "ELEVATED"
-else:
-    status_color, risk_text = "green", "NOMINAL"
+# --- MAIN HUD LAYOUT ---
+col1, col2, col3 = st.columns([1.2, 1.5, 1.2])
 
-# --- MAIN DASHBOARD LAYOUT ---
-col1, col2, col3 = st.columns([1, 1.5, 1])
-
-# COLUMN 1: Risk & XAI
+# COLUMN 1: TELEMETRY & XAI
 with col1:
-    st.subheader("City Risk Index (T + 60m)")
-    st.markdown(f"<div class='big-font' style='color: {status_color};'>{risk_score}% - {risk_text}</div>", unsafe_allow_html=True)
+    st.markdown(f"""
+        <div class="hud-panel">
+            <h3 style="margin-top:0;">THREAT LEVEL</h3>
+            <div style="font-size: 3rem; color: {color_hex};" class="{alert_class}">
+                {risk_score}%
+            </div>
+            <div class="telemetry">PROBABILITY OF CASCADE FAILURE</div>
+        </div>
+    """, unsafe_allow_html=True)
     
-    st.markdown("### Explainable AI (XAI)")
-    st.caption("Feature Attribution for Risk Spike")
-    
-    rain_contrib = min(100, int(rain * 0.45))
-    traffic_contrib = min(100, int(traffic_val * 0.35))
-    drain_contrib = min(100, int((100 - drain_val) * 0.3))
-    
-    st.progress(rain_contrib / 100, text=f"Rainfall Inundation: +{rain_contrib}%")
-    st.progress(traffic_contrib / 100, text=f"Road Bottleneck: +{traffic_contrib}%")
-    st.progress(drain_contrib / 100, text=f"Drainage Deficit: +{drain_contrib}%")
+    st.markdown('<div class="hud-panel">', unsafe_allow_html=True)
+    st.markdown("### NEURAL NETWORK ATTRIBUTION")
+    st.progress(min(1, (rain * 0.45) / 100), text="[ATMOSPHERE] PRECIPITATION INUNDATION")
+    st.progress(min(1, (traffic_val * 0.35) / 100), text="[SURFACE] KINEMATIC BOTTLENECK")
+    st.progress(min(1, ((100 - drain_val) * 0.3) / 100), text="[SUB-SURFACE] DRAINAGE DEFICIT")
+    st.markdown('</div>', unsafe_allow_html=True)
 
-# COLUMN 2: GNN Dependency Graph
+# COLUMN 2: TACTICAL RADAR (GNN)
 with col2:
-    st.subheader("GNN Cascading Failure Topology")
+    st.markdown('<div class="hud-panel" style="text-align:center;">', unsafe_allow_html=True)
+    st.markdown("### TACTICAL TOPOLOGY RADAR")
     
-    # Generate Graphviz network
     graph = graphviz.Digraph(engine='dot')
-    graph.attr(bgcolor='transparent')
+    graph.attr(bgcolor='transparent', size='4,4')
     
-    # Node styling based on risk thresholds
-    pump_color = 'red' if risk_score > 60 else 'green'
-    road_color = 'red' if risk_score > 75 else 'green'
-    hosp_color = 'red' if risk_score > 80 else 'green'
+    # Wireframe Node Styling
+    def node_style(risk_thresh):
+        if risk_score > risk_thresh:
+            return {'style': 'bold', 'color': '#ff003c', 'fontcolor': '#ff003c', 'fillcolor': '#1a0006'}
+        return {'style': 'bold', 'color': '#00ff41', 'fontcolor': '#00ff41', 'fillcolor': '#001a04'}
+
+    graph.node('Power', 'SUBSTATION 4\n[GRID_OK]', **node_style(999)) # Always ok for demo
+    graph.node('Pump', 'DRAINAGE PUMP B\n[HW_ZONE]', **node_style(60))
+    graph.node('Road', 'ARTERIAL FLYOVER\n[KONA_EXP]', **node_style(75))
+    graph.node('Hospital', 'APEX TRAUMA\n[MED_EVAC]', **node_style(80))
     
-    graph.node('Power', 'Substation 4\n(Grid Active)', style='filled', fillcolor='green', fontcolor='white')
-    graph.node('Pump', 'Drainage Pump B\n(Howrah Zone)', style='filled', fillcolor=pump_color, fontcolor='white')
-    graph.node('Road', 'Arterial Flyover\n(Kona Expressway)', style='filled', fillcolor=road_color, fontcolor='white')
-    graph.node('Hospital', 'Apex Trauma Center\n(Emergency Ward)', style='filled', fillcolor=hosp_color, fontcolor='white')
-    
-    graph.edge('Power', 'Pump', color='gray')
-    graph.edge('Pump', 'Road', color='red' if pump_color=='red' else 'gray', label="Flooding Dependency")
-    graph.edge('Road', 'Hospital', color='red' if road_color=='red' else 'gray', label="Ambulance Routing")
+    graph.edge('Power', 'Pump', color='#00ff41')
+    graph.edge('Pump', 'Road', color='#ff003c' if risk_score > 60 else '#00ff41', style='dashed' if risk_score > 60 else 'solid')
+    graph.edge('Road', 'Hospital', color='#ff003c' if risk_score > 75 else '#00ff41', style='dashed' if risk_score > 75 else 'solid')
     
     st.graphviz_chart(graph, use_container_width=True)
+    st.markdown('</div>', unsafe_allow_html=True)
 
-# COLUMN 3: Prescriptive Engine
+# COLUMN 3: PRESCRIPTIVE ENGINE
 with col3:
-    st.subheader("Prescriptive Intelligence")
+    st.markdown('<div class="hud-panel">', unsafe_allow_html=True)
+    st.markdown("### AI DIRECTIVES")
     
     if risk_score > 75:
-        st.error("**CRITICAL: Reroute Arterial Transit & Dispatch Pumps**\n\nPredicted 38-min ambulance blockade to Apex Hospital. Pre-emptively redirect heavy traffic via alternate routes.\n\n*Expected Risk Reduction: -41%*")
+        st.markdown(f"""
+            <div class="warning-flash" style="border: 1px solid #ff003c; padding: 10px;">
+                > CRITICAL BREACH DETECTED<br>
+                > T-MINUS 38 MIN TO APEX HOSPITAL BLOCKADE.<br><br>
+                <strong>RECOMMENDED ACTION:</strong><br>
+                DEPLOY EMERGENCY PUMPS. SEVER CIVILIAN TRAFFIC TO KONA EXPRESSWAY.
+            </div>
+        """, unsafe_allow_html=True)
     elif risk_score > 50:
-        st.warning("**ELEVATED: Pre-stage Auxiliary Pumps in Zone B**\n\nDrainage capacity threshold nearing limits. Standard monitoring advised.\n\n*Expected Risk Reduction: -22%*")
+        st.markdown(f"""
+            <div style="color: #f0a500; border: 1px solid #f0a500; padding: 10px;">
+                > ELEVATED LOAD WARNING<br>
+                > SUBSURFACE DRAINAGE COMPROMISED.<br><br>
+                <strong>RECOMMENDED ACTION:</strong><br>
+                PRE-STAGE AUXILIARY UNITS AT SECTOR B.
+            </div>
+        """, unsafe_allow_html=True)
     else:
-        st.success("**NOMINAL: Standard Traffic Adaptive Flow**\n\nAll infrastructure operating within safe tolerance parameters.")
+        st.markdown(f"""
+            <div style="color: #00ff41; border: 1px solid #00ff41; padding: 10px;">
+                > SYSTEM NOMINAL<br>
+                > ALL PARAMETERS WITHIN TOLERANCE.<br>
+                > MAINTAINING ADAPTIVE FLOW.
+            </div>
+        """, unsafe_allow_html=True)
         
-    st.info("**Model Confidence: 93.8%**\nTrained on 36-month spatiotemporal flood & transit logs.")
+    st.markdown("<br><div class='telemetry'>CONFIDENCE MATCH: 93.8%<br>DATASET: 36_MO_SPATIOTEMPORAL_LOG</div>", unsafe_allow_html=True)
+    st.markdown('</div>', unsafe_allow_html=True)
