@@ -128,20 +128,46 @@ with col2:
     st.markdown('<div class="hud-panel" style="text-align:center;">', unsafe_allow_html=True)
     st.markdown(f"### TACTICAL TOPOLOGY RADAR")
     graph = graphviz.Digraph(engine='dot')
-    graph.attr(bgcolor='transparent', size='4,4')
+    graph.attr(bgcolor='transparent', size='4.5,4.5')
     
     def node_style(risk_thresh):
-        if risk_score > risk_thresh: return {'style': 'bold', 'color': '#ff003c', 'fontcolor': '#ff003c', 'fillcolor': '#1a0006'}
-        return {'style': 'bold', 'color': '#00ff41', 'fontcolor': '#00ff41', 'fillcolor': '#001a04'}
+        if risk_score > risk_thresh: return {'style': 'bold', 'color': '#ff003c', 'fontcolor': '#ff003c', 'fillcolor': '#1a0006', 'shape': 'box'}
+        return {'style': 'bold', 'color': '#00ff41', 'fontcolor': '#00ff41', 'fillcolor': '#001a04', 'shape': 'box'}
 
-    # Generate a dynamic tag based on the city (e.g., "MOSCOW_ZN")
     city_tag = st.session_state['target_name'].split(',')[0].upper()[:8]
+    
+    # 1. GENERATE OVERWHELMING DYNAMIC TELEMETRY DATA
+    # Power Node Data (Voltage drops if rain is very high)
+    grid_volts = 220 if rain < 100 else 184
+    grid_hz = 50.0 if rain < 100 else 47.2
+    pwr_status = "STABLE" if rain < 100 else "FLUCTUATING"
+    
+    # Pump Node Data (Flow rate maxes out if rain is high)
+    flow_rate = min(99.9, rain * 0.8)
+    pump_rpm = int(min(3500, 1500 + (rain * 15)))
+    
+    # Road Node Data (VPM drops as traffic density goes up)
+    vpm = max(5, int(120 - (traffic_val * 1.1)))
+    delay_min = int((traffic_val / 100) * 45)
+    
+    # Hospital Node Data
+    icu_avail = beds
+    triage_status = "NORMAL" if beds > 40 else "OVERFLOW"
 
-    # Re-added the bracketed data!
-    graph.node('Power', f'MAIN SUBSTATION\n[GRID_ACTIVE]', **node_style(999)) 
-    graph.node('Pump', f'DRAINAGE PUMP\n[{city_tag}_ZN]', **node_style(60))
-    graph.node('Road', f'PRIMARY ARTERY\n[SURFACE_LINK]', **node_style(75))
-    graph.node('Hospital', f'APEX TRAUMA\n[MED_EVAC]', **node_style(80))
+    # 2. BUILD THE DENSE DATA NODES
+    # Use HTML-like tables inside Graphviz for extreme data density
+    node_pwr = f"<<TABLE BORDER='0' CELLBORDER='0' CELLSPACING='0'><TR><TD ALIGN='CENTER'><B>MAIN SUBSTATION [{city_tag}]</B></TD></TR><TR><TD ALIGN='LEFT'><FONT POINT-SIZE='9'>VOLT: {grid_volts}kV | {grid_hz}Hz</FONT></TD></TR><TR><TD ALIGN='LEFT'><FONT POINT-SIZE='9'>STAT: {pwr_status}</FONT></TD></TR></TABLE>>"
+    
+    node_pump = f"<<TABLE BORDER='0' CELLBORDER='0' CELLSPACING='0'><TR><TD ALIGN='CENTER'><B>DRAINAGE NETWORK</B></TD></TR><TR><TD ALIGN='LEFT'><FONT POINT-SIZE='9'>FLOW: {flow_rate:.1f} M3/S</FONT></TD></TR><TR><TD ALIGN='LEFT'><FONT POINT-SIZE='9'>RPM: {pump_rpm}</FONT></TD></TR><TR><TD ALIGN='LEFT'><FONT POINT-SIZE='9'>CAPACITY: {drain_val}%</FONT></TD></TR></TABLE>>"
+    
+    node_road = f"<<TABLE BORDER='0' CELLBORDER='0' CELLSPACING='0'><TR><TD ALIGN='CENTER'><B>ARTERIAL TRANSIT</B></TD></TR><TR><TD ALIGN='LEFT'><FONT POINT-SIZE='9'>VOL: {vpm} VEH/MIN</FONT></TD></TR><TR><TD ALIGN='LEFT'><FONT POINT-SIZE='9'>DELAY: +{delay_min} MINS</FONT></TD></TR><TR><TD ALIGN='LEFT'><FONT POINT-SIZE='9'>DENS: {traffic_val}%</FONT></TD></TR></TABLE>>"
+    
+    node_hosp = f"<<TABLE BORDER='0' CELLBORDER='0' CELLSPACING='0'><TR><TD ALIGN='CENTER'><B>APEX TRAUMA CENTER</B></TD></TR><TR><TD ALIGN='LEFT'><FONT POINT-SIZE='9'>ICU AVAIL: {icu_avail}%</FONT></TD></TR><TR><TD ALIGN='LEFT'><FONT POINT-SIZE='9'>TRIAGE: {triage_status}</FONT></TD></TR></TABLE>>"
+
+    graph.node('Power', node_pwr, **node_style(999)) 
+    graph.node('Pump', node_pump, **node_style(60))
+    graph.node('Road', node_road, **node_style(75))
+    graph.node('Hospital', node_hosp, **node_style(80))
     
     graph.edge('Power', 'Pump', color='#00ff41')
     graph.edge('Pump', 'Road', color='#ff003c' if risk_score > 60 else '#00ff41', style='dashed' if risk_score > 60 else 'solid')
@@ -149,6 +175,8 @@ with col2:
     
     st.graphviz_chart(graph, use_container_width=True)
     st.markdown('</div>', unsafe_allow_html=True)
+
+    
 with col3:
     st.markdown('<div class="hud-panel">', unsafe_allow_html=True)
     st.markdown("### AI DIRECTIVES")
