@@ -134,10 +134,14 @@ with col2:
         if risk_score > risk_thresh: return {'style': 'bold', 'color': '#ff003c', 'fontcolor': '#ff003c', 'fillcolor': '#1a0006'}
         return {'style': 'bold', 'color': '#00ff41', 'fontcolor': '#00ff41', 'fillcolor': '#001a04'}
 
-    graph.node('Power', f'MAIN SUBSTATION', **node_style(999)) 
-    graph.node('Pump', f'DRAINAGE PUMP', **node_style(60))
-    graph.node('Road', f'PRIMARY ARTERY', **node_style(75))
-    graph.node('Hospital', f'APEX TRAUMA', **node_style(80))
+    # Generate a dynamic tag based on the city (e.g., "MOSCOW_ZN")
+    city_tag = st.session_state['target_name'].split(',')[0].upper()[:8]
+
+    # Re-added the bracketed data!
+    graph.node('Power', f'MAIN SUBSTATION\n[GRID_ACTIVE]', **node_style(999)) 
+    graph.node('Pump', f'DRAINAGE PUMP\n[{city_tag}_ZN]', **node_style(60))
+    graph.node('Road', f'PRIMARY ARTERY\n[SURFACE_LINK]', **node_style(75))
+    graph.node('Hospital', f'APEX TRAUMA\n[MED_EVAC]', **node_style(80))
     
     graph.edge('Power', 'Pump', color='#00ff41')
     graph.edge('Pump', 'Road', color='#ff003c' if risk_score > 60 else '#00ff41', style='dashed' if risk_score > 60 else 'solid')
@@ -145,7 +149,6 @@ with col2:
     
     st.graphviz_chart(graph, use_container_width=True)
     st.markdown('</div>', unsafe_allow_html=True)
-
 with col3:
     st.markdown('<div class="hud-panel">', unsafe_allow_html=True)
     st.markdown("### AI DIRECTIVES")
