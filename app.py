@@ -2,6 +2,7 @@ import streamlit as st
 import graphviz
 import time
 import requests
+import random
 from datetime import datetime
 import streamlit.components.v1 as components
 from intel_feed import get_map_html, get_news_summary, get_cctv_html
@@ -24,11 +25,16 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
+# --- SESSION STATE ---
 if 'target_lat' not in st.session_state: st.session_state['target_lat'] = "22.5958"
 if 'target_lon' not in st.session_state: st.session_state['target_lon'] = "88.2636"
 if 'target_name' not in st.session_state: st.session_state['target_name'] = "HOWRAH"
 
-# NEW HACKATHON-SAFE GEOCODER (Open-Meteo)
+if 'sim_rain' not in st.session_state: st.session_state.sim_rain = 35
+if 'sim_traffic' not in st.session_state: st.session_state.sim_traffic = 45
+if 'sim_drain' not in st.session_state: st.session_state.sim_drain = 85
+if 'sim_beds' not in st.session_state: st.session_state.sim_beds = 70
+
 def geocode_location(query):
     try:
         url = f"https://geocoding-api.open-meteo.com/v1/search?name={query}&count=1&language=en&format=json"
@@ -49,6 +55,12 @@ if st.sidebar.button("ENGAGE SEARCH"):
             st.session_state['target_lat'] = lat
             st.session_state['target_lon'] = lon
             st.session_state['target_name'] = name
+            
+            # Instantly scrambles the sliders for the new city
+            st.session_state.sim_rain = random.randint(0, 140)
+            st.session_state.sim_traffic = random.randint(20, 95)
+            st.session_state.sim_drain = random.randint(30, 95)
+            st.session_state.sim_beds = random.randint(20, 90)
             st.sidebar.success(f"LOCK AQUIRED: {name}")
         else:
             st.sidebar.error("TARGET NOT FOUND.")
@@ -56,52 +68,57 @@ if st.sidebar.button("ENGAGE SEARCH"):
 st.sidebar.markdown("---")
 st.sidebar.markdown("### 🎛️ SENSOR CONTROLS")
 use_live_data = st.sidebar.toggle(f"🟢 ACTIVATE LIVE SENSORS", value=False)
-# Added field for custom YouTube ID!
-yt_id = st.sidebar.text_input("CCTV YOUTUBE ID:", value="1-iS7LmhUcA", help="Paste the 11-character ID from a YouTube live stream here.")
+auto_sync = st.sidebar.toggle(f"⏱️ ENABLE LIVE SYNC (15s Loop)", value=False, help="Forces the dashboard to fetch live changes automatically.")
 
+# --- RICH API FETCHING ---
 def get_live_weather(lat, lon):
     try:
         api_key = st.secrets["OPENWEATHER_KEY"]
         res = requests.get(f"https://api.openweathermap.org/data/2.5/weather?lat={lat}&lon={lon}&appid={api_key}&units=metric").json()
-        if 'rain' in res: return res['rain'].get('1h', 0) * 10 
-        return 0 
-    except: return 0
+        rain = res.get('rain', {}).get('1h', 0) * 10 
+        temp = res['main']['temp']
+        wind = round(res['wind']['speed'] * 3.6, 1) # km/h
+        desc = res['weather'][0]['description']
+        return rain, temp, wind, desc
+    except: return 0, 24, 12, "Clear Skies"
 
 def get_live_traffic(lat, lon):
     try:
         api_key = st.secrets["TOMTOM_KEY"]
         res = requests.get(f"https://api.tomtom.com/traffic/services/4/flowSegmentData/absolute/10/json?key={api_key}&point={lat},{lon}").json()
-        free_flow = res['flowSegmentData']['freeFlowSpeed']
-        if free_flow > 0: return int(max(10, 100 - ((res['flowSegmentData']['currentSpeed'] / free_flow) * 100)))
-        return 45
-    except: return 45
+        curr = res['flowSegmentData']['currentSpeed']
+        free = res['flowSegmentData']['freeFlowSpeed']
+        dens = int(max(10, 100 - ((curr / free) * 100))) if free > 0 else 45
+        return dens, curr
+    except: return 45, 40
+
+# --- DATA ASSIGNMENT ---
+w_temp, w_wind, w_desc, t_speed = 28.5, 14.2, "simulated conditions", 45 # Defaults
 
 if use_live_data:
-    st.sidebar.markdown("<span style='color:#00ff41'>[LINK ESTABLISHED]</span>", unsafe_allow_html=True)
-    live_rain = get_live_weather(st.session_state['target_lat'], st.session_state['target_lon'])
-    live_traffic = get_live_traffic(st.session_state['target_lat'], st.session_state['target_lon'])
-    rain = st.sidebar.slider("PRECIPITATION [mm/h]", 0, 150, int(live_rain), disabled=True)
-    traffic = st.sidebar.slider("TRAFFIC DENSITY [%]", 10, 100, int(live_traffic), disabled=True)
+    st.sidebar.markdown("<span style='color:#00ff41'>[SATELLITE LINK ESTABLISHED]</span>", unsafe_allow_html=True)
+    live_rain, w_temp, w_wind, w_desc = get_live_weather(st.session_state['target_lat'], st.session_state['target_lon'])
+    live_traffic, t_speed = get_live_traffic(st.session_state['target_lat'], st.session_state['target_lon'])
+    
+    rain = st.sidebar.slider("PRECIPITATION [mm/h] (LIVE)", 0, 150, int(live_rain), disabled=True)
+    traffic = st.sidebar.slider("TRAFFIC DENSITY [%] (LIVE)", 10, 100, int(live_traffic), disabled=True)
 else:
-    st.sidebar.markdown("<span style='color:#ff003c'>[MANUAL OVERRIDE]</span>", unsafe_allow_html=True)
-    rain = st.sidebar.slider("PRECIPITATION [mm/h]", 0, 150, 35)
-    traffic = st.sidebar.slider("TRAFFIC DENSITY [%]", 10, 100, 45)
+    st.sidebar.markdown("<span style='color:#00f0ff'>[AI SIMULATION MODE]</span>", unsafe_allow_html=True)
+    rain = st.sidebar.slider("PRECIPITATION [mm/h]", 0, 150, key='sim_rain')
+    traffic = st.sidebar.slider("TRAFFIC DENSITY [%]", 10, 100, key='sim_traffic')
 
 st.sidebar.markdown("---")
-drain = st.sidebar.slider("DRAINAGE CAPACITY [%]", 10, 100, 85)
-beds = st.sidebar.slider("TRAUMA CENTER LOAD [%]", 10, 100, 70)
+drain = st.sidebar.slider("DRAINAGE CAPACITY [%]", 10, 100, key='sim_drain')
+beds = st.sidebar.slider("TRAUMA CENTER LOAD [%]", 10, 100, key='sim_beds')
 
-traffic_val = st.session_state.get('traffic', traffic)
-drain_val = st.session_state.get('drain', drain)
-
-risk_score = min(100, int((rain * 0.45) + (traffic_val * 0.35) + ((100 - drain_val) * 0.3) + ((100 - beds) * 0.2)))
+risk_score = min(100, int((rain * 0.45) + (traffic * 0.35) + ((100 - drain) * 0.3) + ((100 - beds) * 0.2)))
 alert_class = "warning-flash" if risk_score > 75 else ""
 color_hex = "#ff003c" if risk_score > 75 else ("#f0a500" if risk_score > 50 else "#00ff41")
 
 current_time = datetime.now().strftime("%H:%M:%S:%f")[:-3]
 st.markdown(f"""
     <div style='display: flex; justify-content: space-between; border-bottom: 2px solid #00f0ff; padding-bottom: 5px; margin-bottom: 20px;'>
-        <div><span style='color:#00f0ff'>SYS:</span> BHAVISHYA_GLOBAL_V4.0</div>
+        <div><span style='color:#00f0ff'>SYS:</span> BHAVISHYA_GLOBAL_V6.0</div>
         <div><span style='color:#00f0ff'>TGT:</span> {st.session_state['target_name']} [{st.session_state['target_lat']}° N, {st.session_state['target_lon']}° E]</div>
         <div class='telemetry'><span style='color:#00f0ff'>UPTIME:</span> {current_time}</div>
     </div>
@@ -120,8 +137,8 @@ with col1:
     st.markdown('<div class="hud-panel">', unsafe_allow_html=True)
     st.markdown("### NEURAL NETWORK ATTRIBUTION")
     st.progress(min(1, (rain * 0.45) / 100), text="[ATMOSPHERE] PRECIPITATION INUNDATION")
-    st.progress(min(1, (traffic_val * 0.35) / 100), text="[SURFACE] KINEMATIC BOTTLENECK")
-    st.progress(min(1, ((100 - drain_val) * 0.3) / 100), text="[SUB-SURFACE] DRAINAGE DEFICIT")
+    st.progress(min(1, (traffic * 0.35) / 100), text="[SURFACE] KINEMATIC BOTTLENECK")
+    st.progress(min(1, ((100 - drain) * 0.3) / 100), text="[SUB-SURFACE] DRAINAGE DEFICIT")
     st.markdown('</div>', unsafe_allow_html=True)
 
 with col2:
@@ -136,33 +153,17 @@ with col2:
 
     city_tag = st.session_state['target_name'].split(',')[0].upper()[:8]
     
-    # 1. GENERATE OVERWHELMING DYNAMIC TELEMETRY DATA
-    # Power Node Data (Voltage drops if rain is very high)
-    grid_volts = 220 if rain < 100 else 184
-    grid_hz = 50.0 if rain < 100 else 47.2
+    # Passing the actual live data into the nodes!
+    grid_hz = round(50.0 - (rain * 0.05), 1)
     pwr_status = "STABLE" if rain < 100 else "FLUCTUATING"
-    
-    # Pump Node Data (Flow rate maxes out if rain is high)
     flow_rate = min(99.9, rain * 0.8)
-    pump_rpm = int(min(3500, 1500 + (rain * 15)))
-    
-    # Road Node Data (VPM drops as traffic density goes up)
-    vpm = max(5, int(120 - (traffic_val * 1.1)))
-    delay_min = int((traffic_val / 100) * 45)
-    
-    # Hospital Node Data
-    icu_avail = beds
+    vpm = max(5, int(120 - (traffic * 1.1)))
     triage_status = "NORMAL" if beds > 40 else "OVERFLOW"
 
-    # 2. BUILD THE DENSE DATA NODES
-    # Use HTML-like tables inside Graphviz for extreme data density
-    node_pwr = f"<<TABLE BORDER='0' CELLBORDER='0' CELLSPACING='0'><TR><TD ALIGN='CENTER'><B>MAIN SUBSTATION [{city_tag}]</B></TD></TR><TR><TD ALIGN='LEFT'><FONT POINT-SIZE='9'>VOLT: {grid_volts}kV | {grid_hz}Hz</FONT></TD></TR><TR><TD ALIGN='LEFT'><FONT POINT-SIZE='9'>STAT: {pwr_status}</FONT></TD></TR></TABLE>>"
-    
-    node_pump = f"<<TABLE BORDER='0' CELLBORDER='0' CELLSPACING='0'><TR><TD ALIGN='CENTER'><B>DRAINAGE NETWORK</B></TD></TR><TR><TD ALIGN='LEFT'><FONT POINT-SIZE='9'>FLOW: {flow_rate:.1f} M3/S</FONT></TD></TR><TR><TD ALIGN='LEFT'><FONT POINT-SIZE='9'>RPM: {pump_rpm}</FONT></TD></TR><TR><TD ALIGN='LEFT'><FONT POINT-SIZE='9'>CAPACITY: {drain_val}%</FONT></TD></TR></TABLE>>"
-    
-    node_road = f"<<TABLE BORDER='0' CELLBORDER='0' CELLSPACING='0'><TR><TD ALIGN='CENTER'><B>ARTERIAL TRANSIT</B></TD></TR><TR><TD ALIGN='LEFT'><FONT POINT-SIZE='9'>VOL: {vpm} VEH/MIN</FONT></TD></TR><TR><TD ALIGN='LEFT'><FONT POINT-SIZE='9'>DELAY: +{delay_min} MINS</FONT></TD></TR><TR><TD ALIGN='LEFT'><FONT POINT-SIZE='9'>DENS: {traffic_val}%</FONT></TD></TR></TABLE>>"
-    
-    node_hosp = f"<<TABLE BORDER='0' CELLBORDER='0' CELLSPACING='0'><TR><TD ALIGN='CENTER'><B>APEX TRAUMA CENTER</B></TD></TR><TR><TD ALIGN='LEFT'><FONT POINT-SIZE='9'>ICU AVAIL: {icu_avail}%</FONT></TD></TR><TR><TD ALIGN='LEFT'><FONT POINT-SIZE='9'>TRIAGE: {triage_status}</FONT></TD></TR></TABLE>>"
+    node_pwr = f"<<TABLE BORDER='0' CELLBORDER='0' CELLSPACING='0'><TR><TD ALIGN='CENTER'><B>MAIN SUBSTATION [{city_tag}]</B></TD></TR><TR><TD ALIGN='LEFT'><FONT POINT-SIZE='9'>ATMOS: {w_temp}°C | {w_desc.upper()}</FONT></TD></TR><TR><TD ALIGN='LEFT'><FONT POINT-SIZE='9'>GRID: {grid_hz}Hz | {pwr_status}</FONT></TD></TR></TABLE>>"
+    node_pump = f"<<TABLE BORDER='0' CELLBORDER='0' CELLSPACING='0'><TR><TD ALIGN='CENTER'><B>DRAINAGE NETWORK</B></TD></TR><TR><TD ALIGN='LEFT'><FONT POINT-SIZE='9'>FLOW: {flow_rate:.1f} M3/S</FONT></TD></TR><TR><TD ALIGN='LEFT'><FONT POINT-SIZE='9'>CAPACITY: {drain}%</FONT></TD></TR></TABLE>>"
+    node_road = f"<<TABLE BORDER='0' CELLBORDER='0' CELLSPACING='0'><TR><TD ALIGN='CENTER'><B>ARTERIAL TRANSIT</B></TD></TR><TR><TD ALIGN='LEFT'><FONT POINT-SIZE='9'>SPEED: {t_speed} KM/H</FONT></TD></TR><TR><TD ALIGN='LEFT'><FONT POINT-SIZE='9'>DENS: {traffic}%</FONT></TD></TR></TABLE>>"
+    node_hosp = f"<<TABLE BORDER='0' CELLBORDER='0' CELLSPACING='0'><TR><TD ALIGN='CENTER'><B>APEX TRAUMA CENTER</B></TD></TR><TR><TD ALIGN='LEFT'><FONT POINT-SIZE='9'>ICU AVAIL: {beds}%</FONT></TD></TR><TR><TD ALIGN='LEFT'><FONT POINT-SIZE='9'>TRIAGE: {triage_status}</FONT></TD></TR></TABLE>>"
 
     graph.node('Power', node_pwr, **node_style(999)) 
     graph.node('Pump', node_pump, **node_style(60))
@@ -176,7 +177,6 @@ with col2:
     st.graphviz_chart(graph, use_container_width=True)
     st.markdown('</div>', unsafe_allow_html=True)
 
-    
 with col3:
     st.markdown('<div class="hud-panel">', unsafe_allow_html=True)
     st.markdown("### AI DIRECTIVES")
@@ -186,7 +186,6 @@ with col3:
     st.markdown("<br><div class='telemetry'>CONFIDENCE MATCH: 93.8%<br>DATASET: 36_MO_SPATIOTEMPORAL_LOG</div>", unsafe_allow_html=True)
     st.markdown('</div>', unsafe_allow_html=True)
 
-# --- ROW 2: LIVE SAT-MAP, CCTV, & INTEL FEED ---
 st.markdown("<br>", unsafe_allow_html=True)
 map_col, cctv_col, intel_col = st.columns([1.1, 1.1, 1])
 
@@ -198,12 +197,19 @@ with map_col:
 
 with cctv_col:
     st.markdown('<div class="hud-panel" style="padding: 0; border: none;">', unsafe_allow_html=True)
-    st.markdown(f"<h3 style='margin-bottom: 5px;'>📹 LIVE CCTV INTERCEPT</h3>", unsafe_allow_html=True)
-    components.html(get_cctv_html(youtube_id=yt_id), height=290)
+    st.markdown(f"<h3 style='margin-bottom: 5px;'>📹 LIVE CCTV (AI VISION)</h3>", unsafe_allow_html=True)
+    components.html(get_cctv_html(), height=290)
     st.markdown('</div>', unsafe_allow_html=True)
 
 with intel_col:
     st.markdown('<div class="hud-panel" style="padding: 0; border: none;">', unsafe_allow_html=True)
     st.markdown("<h3 style='margin-bottom: 5px;'>📡 SIGNAL INTEL</h3>", unsafe_allow_html=True)
-    st.markdown(get_news_summary(risk_score, traffic_val, st.session_state['target_name']), unsafe_allow_html=True)
+    st.markdown(get_news_summary(risk_score, traffic, st.session_state['target_name'], w_desc, w_temp, w_wind, t_speed), unsafe_allow_html=True)
     st.markdown('</div>', unsafe_allow_html=True)
+
+# --- THE AUTO-SYNC ENGINE ---
+# If Live Sync is ON, wait 15 seconds and automatically rerun the whole script
+if auto_sync:
+    time.sleep(15)
+    st.rerun()
+    
