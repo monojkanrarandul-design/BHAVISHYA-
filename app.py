@@ -4,12 +4,10 @@ import time
 import requests
 from datetime import datetime
 import streamlit.components.v1 as components
-from intel_feed import get_map_html, get_news_summary
+from intel_feed import get_map_html, get_news_summary, get_cctv_html
 
-# --- PAGE CONFIGURATION ---
 st.set_page_config(page_title="BHAVISHYA | GLOBAL HUD", layout="wide", initial_sidebar_state="expanded")
 
-# --- CYBERPUNK / HELICOPTER HUD CSS ---
 st.markdown("""
     <style>
     @import url('https://fonts.googleapis.com/css2?family=Share+Tech+Mono&display=swap');
@@ -22,33 +20,27 @@ st.markdown("""
     .telemetry { font-size: 0.8rem; color: #a3a3a3; }
     [data-testid="stSidebar"] { background-color: #020603 !important; border-right: 1px solid #00ff41; }
     #MainMenu, footer {visibility: hidden;}
-    /* Style the text input box to look like a terminal */
     .stTextInput input { background-color: #001a04 !important; color: #00ff41 !important; border: 1px solid #00ff41 !important; font-family: 'Share Tech Mono', monospace !important; }
     </style>
 """, unsafe_allow_html=True)
 
-# --- SESSION STATE INITIALIZATION ---
-# Default to Howrah
 if 'target_lat' not in st.session_state: st.session_state['target_lat'] = "22.5958"
 if 'target_lon' not in st.session_state: st.session_state['target_lon'] = "88.2636"
-if 'target_name' not in st.session_state: st.session_state['target_name'] = "HOWRAH, IN"
+if 'target_name' not in st.session_state: st.session_state['target_name'] = "HOWRAH"
 
-# --- GEOCODING FUNCTION (Free OpenStreetMap API) ---
+# NEW HACKATHON-SAFE GEOCODER (Open-Meteo)
 def geocode_location(query):
     try:
-        # Nominatim requires a user-agent header
-        headers = {'User-Agent': 'BhavishyaHackathonApp/1.0 (test@example.com)'}
-        url = f"https://nominatim.openstreetmap.org/search?q={query}&format=json&limit=1"
-        response = requests.get(url, headers=headers).json()
-        if response:
-            return response[0]['lat'], response[0]['lon'], response[0]['display_name'].split(',')[0].upper()
+        url = f"https://geocoding-api.open-meteo.com/v1/search?name={query}&count=1&language=en&format=json"
+        res = requests.get(url).json()
+        if "results" in res and len(res["results"]) > 0:
+            data = res["results"][0]
+            return str(data["latitude"]), str(data["longitude"]), data["name"].upper()
         return None, None, None
     except: return None, None, None
 
-# --- SIDEBAR (FLIGHT CONTROLS) ---
 st.sidebar.markdown("### 🌐 GLOBAL TARGETING SYSTEM")
-st.sidebar.caption("ENTER ANY CITY OR ADDRESS WORLDWIDE:")
-search_query = st.sidebar.text_input("TARGET COORDINATES:", value="Howrah, India")
+search_query = st.sidebar.text_input("TARGET COORDINATES (City):", value="New York")
 
 if st.sidebar.button("ENGAGE SEARCH"):
     with st.spinner("CALCULATING ORBITAL TRAJECTORY..."):
@@ -64,8 +56,9 @@ if st.sidebar.button("ENGAGE SEARCH"):
 st.sidebar.markdown("---")
 st.sidebar.markdown("### 🎛️ SENSOR CONTROLS")
 use_live_data = st.sidebar.toggle(f"🟢 ACTIVATE LIVE SENSORS", value=False)
+# Added field for custom YouTube ID!
+yt_id = st.sidebar.text_input("CCTV YOUTUBE ID:", value="1-iS7LmhUcA", help="Paste the 11-character ID from a YouTube live stream here.")
 
-# LIVE API CALLS
 def get_live_weather(lat, lon):
     try:
         api_key = st.secrets["OPENWEATHER_KEY"]
@@ -101,23 +94,19 @@ beds = st.sidebar.slider("TRAUMA CENTER LOAD [%]", 10, 100, 70)
 traffic_val = st.session_state.get('traffic', traffic)
 drain_val = st.session_state.get('drain', drain)
 
-# --- MATH ---
 risk_score = min(100, int((rain * 0.45) + (traffic_val * 0.35) + ((100 - drain_val) * 0.3) + ((100 - beds) * 0.2)))
 alert_class = "warning-flash" if risk_score > 75 else ""
 color_hex = "#ff003c" if risk_score > 75 else ("#f0a500" if risk_score > 50 else "#00ff41")
 
-# --- TOP HUD TELEMETRY BAR ---
 current_time = datetime.now().strftime("%H:%M:%S:%f")[:-3]
 st.markdown(f"""
     <div style='display: flex; justify-content: space-between; border-bottom: 2px solid #00f0ff; padding-bottom: 5px; margin-bottom: 20px;'>
-        <div><span style='color:#00f0ff'>SYS:</span> BHAVISHYA_GLOBAL_V3.0</div>
+        <div><span style='color:#00f0ff'>SYS:</span> BHAVISHYA_GLOBAL_V4.0</div>
         <div><span style='color:#00f0ff'>TGT:</span> {st.session_state['target_name']} [{st.session_state['target_lat']}° N, {st.session_state['target_lon']}° E]</div>
         <div class='telemetry'><span style='color:#00f0ff'>UPTIME:</span> {current_time}</div>
     </div>
 """, unsafe_allow_html=True)
 
-
-# --- MAIN HUD LAYOUT ---
 col1, col2, col3 = st.columns([1.2, 1.5, 1.2])
 
 with col1:
@@ -145,10 +134,10 @@ with col2:
         if risk_score > risk_thresh: return {'style': 'bold', 'color': '#ff003c', 'fontcolor': '#ff003c', 'fillcolor': '#1a0006'}
         return {'style': 'bold', 'color': '#00ff41', 'fontcolor': '#00ff41', 'fillcolor': '#001a04'}
 
-    graph.node('Power', f'MAIN SUBSTATION\n[GRID_OK]', **node_style(999)) 
-    graph.node('Pump', f'DRAINAGE PUMP\n[ZONE_ALPHA]', **node_style(60))
-    graph.node('Road', f'PRIMARY ARTERY\n[SURFACE_LINK]', **node_style(75))
-    graph.node('Hospital', f'APEX TRAUMA\n[MED_EVAC]', **node_style(80))
+    graph.node('Power', f'MAIN SUBSTATION', **node_style(999)) 
+    graph.node('Pump', f'DRAINAGE PUMP', **node_style(60))
+    graph.node('Road', f'PRIMARY ARTERY', **node_style(75))
+    graph.node('Hospital', f'APEX TRAUMA', **node_style(80))
     
     graph.edge('Power', 'Pump', color='#00ff41')
     graph.edge('Pump', 'Road', color='#ff003c' if risk_score > 60 else '#00ff41', style='dashed' if risk_score > 60 else 'solid')
@@ -161,20 +150,25 @@ with col3:
     st.markdown('<div class="hud-panel">', unsafe_allow_html=True)
     st.markdown("### AI DIRECTIVES")
     if risk_score > 75: st.markdown(f"<div class='warning-flash' style='border: 1px solid #ff003c; padding: 10px;'>> CRITICAL BREACH DETECTED<br>> T-MINUS 38 MIN TO APEX HOSPITAL BLOCKADE.<br><br><strong>RECOMMENDED ACTION:</strong><br>DEPLOY EMERGENCY PUMPS. SEVER CIVILIAN TRAFFIC.</div>", unsafe_allow_html=True)
-    elif risk_score > 50: st.markdown(f"<div style='color: #f0a500; border: 1px solid #f0a500; padding: 10px;'>> ELEVATED LOAD WARNING<br>> SUBSURFACE DRAINAGE COMPROMISED.<br><br><strong>RECOMMENDED ACTION:</strong><br>PRE-STAGE AUXILIARY UNITS AT ZONE ALPHA.</div>", unsafe_allow_html=True)
+    elif risk_score > 50: st.markdown(f"<div style='color: #f0a500; border: 1px solid #f0a500; padding: 10px;'>> ELEVATED LOAD WARNING<br>> SUBSURFACE DRAINAGE COMPROMISED.<br><br><strong>RECOMMENDED ACTION:</strong><br>PRE-STAGE AUXILIARY UNITS.</div>", unsafe_allow_html=True)
     else: st.markdown(f"<div style='color: #00ff41; border: 1px solid #00ff41; padding: 10px;'>> SYSTEM NOMINAL<br>> ALL PARAMETERS WITHIN TOLERANCE.<br>> MAINTAINING ADAPTIVE FLOW.</div>", unsafe_allow_html=True)
     st.markdown("<br><div class='telemetry'>CONFIDENCE MATCH: 93.8%<br>DATASET: 36_MO_SPATIOTEMPORAL_LOG</div>", unsafe_allow_html=True)
     st.markdown('</div>', unsafe_allow_html=True)
 
-# --- ROW 2: LIVE SAT-MAP & INTEL FEED ---
+# --- ROW 2: LIVE SAT-MAP, CCTV, & INTEL FEED ---
 st.markdown("<br>", unsafe_allow_html=True)
-map_col, intel_col = st.columns([1.5, 1])
+map_col, cctv_col, intel_col = st.columns([1.1, 1.1, 1])
 
 with map_col:
     st.markdown('<div class="hud-panel" style="padding: 0; border: none;">', unsafe_allow_html=True)
     st.markdown(f"<h3 style='margin-bottom: 5px;'>🛰️ ORBITAL RADAR [{st.session_state['target_name']}]</h3>", unsafe_allow_html=True)
-    # The map is now fully interactive!
     components.html(get_map_html(lat=st.session_state['target_lat'], lon=st.session_state['target_lon']), height=290)
+    st.markdown('</div>', unsafe_allow_html=True)
+
+with cctv_col:
+    st.markdown('<div class="hud-panel" style="padding: 0; border: none;">', unsafe_allow_html=True)
+    st.markdown(f"<h3 style='margin-bottom: 5px;'>📹 LIVE CCTV INTERCEPT</h3>", unsafe_allow_html=True)
+    components.html(get_cctv_html(youtube_id=yt_id), height=290)
     st.markdown('</div>', unsafe_allow_html=True)
 
 with intel_col:
